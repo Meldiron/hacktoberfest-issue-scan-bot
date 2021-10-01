@@ -1,4 +1,5 @@
 var GitHub = require("github-api");
+var axios = require("axios");
 
 require("dotenv").config();
 
@@ -24,13 +25,13 @@ const coreTeam = [
 (async () => {
  const orgNames = ["appwrite", "utopia-php"];
  for (const orgName of orgNames) {
-  console.log("Scanning org...", orgName);
+  //   console.log("Scanning org...", orgName);
 
   const org = await gh.getOrganization(orgName);
   const repos = (await org.getRepos()).data;
 
   for (const repo of repos) {
-   console.log("Scanning repo...", repo.name);
+   //    console.log("Scanning repo...", repo.name);
 
    const issueObj = gh.getIssues(orgName, repo.name);
    const issues = (
@@ -42,6 +43,10 @@ const coreTeam = [
    ).data;
 
    for (const issue of issues) {
+    if (new Date(issue.created_at).getFullYear() < 2021) {
+     continue;
+    }
+
     const comments = (await issueObj.listIssueComments(issue.number)).data
      .map((comment) => {
       return {
@@ -59,7 +64,28 @@ const coreTeam = [
      const lastCommentAuthor = lastComment.user.login;
 
      if (!coreTeam.includes(lastCommentAuthor)) {
-      console.log("👀 Action required: ", issue.url);
+      const totalReactions = lastComment.reactions.total_count;
+      if (totalReactions > 0) {
+       const reactionsUrl = lastComment.reactions.url;
+
+       const reactionData = (
+        await axios.get(reactionsUrl, {
+         headers: {
+          Authorization: "Bearer " + process.env.GITHUB_TOKEN,
+         },
+        })
+       ).data;
+
+       const adminReaction = reactionData.find((reaction) => {
+        return coreTeam.includes(reaction.user.login);
+       });
+
+       if (!adminReaction) {
+        console.log("- [ ] 👀 Action required: ", issue.html_url);
+       }
+      } else {
+       console.log("- [ ] 👀 Action required: ", issue.html_url);
+      }
      }
     }
    }
